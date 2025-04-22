@@ -1,0 +1,33 @@
+body {
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    background-color: rgb(2, 2, 39);
+    color: aliceblue;
+    /* background-image: url(https://magazine.byu.edu/wp-content/uploads/2019/01/First-Person-Cosmo-Unicycle.png); */
+    background-repeat: no-repeat;
+    background-size: cover;
+    }
+    
+    a{
+        color: rgba(156, 235, 209);
+        font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+        text-transform: uppercase;
+    }
+    a:visited{
+        color: aqua;
+    }
+    h1, h2{
+        text-align: center;    
+    }
+
+    h1{
+        text-decoration: underline;
+    }
+    /* img{
+        border: 5px solid orange;
+        padding: 5px;
+        z-index: 3;
+    } */
+
+    h3{
+        color: lightgray;
+    }
