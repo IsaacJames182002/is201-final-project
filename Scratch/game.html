@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battleship Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="divstyles.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #001f3f; /* Dark Navy */
+            /* overflow: hidden; */
+            font-family: 'Press Start 2P', cursive;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 800px;
+            border: 3px solid #ccc; /* Lighter border */
+            /* overflow: hidden; */
+            /* Realistic Ocean Background using gradient */
+            background: linear-gradient(
+                to bottom,
+                #0077cc 0%, /* Lighter blue surface */
+                #005fa3 30%, /* Medium blue */
+                #003366 100% /* Darker blue depths */
+            );
+            border-radius: 10px;
+            /* Subtle wave animation */
+            animation: wave-animation 15s infinite linear alternate;
+        }
+
+        @keyframes wave-animation {
+            from { background-position: 0 0; }
+            to { background-position: 100px 50px; }
+        }
+
+        /* --- Ship Structure Styling --- */
+        #player-ship, .enemy-ship {
+            position: absolute; /* Positioned by JS */
+            width: 60px;  /* Overall container width */
+            height: 45px; /* Overall container height (slightly increased) */
+            z-index: 10;
+            /* Make container itself invisible */
+            background-color: transparent;
+            border: none;
+            /* Apply transitions to the container for smooth movement */
+            transition: left 0.1s linear;
+        }
+        /* Position player ship near the bottom */
+        #player-ship {
+            bottom: 5px;
+            left: calc(50% - 30px); /* Initial center, JS updates */
+        }
+        .enemy-ship { z-index: 5; } /* Enemies below player */
+
+        .ship-hull {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%; /* Full width of container */
+            height: 60%; /* Lower part */
+            border: 1px solid #333; /* Dark border */
+            /* Pointed bow effect using border-radius */
+            border-radius: 30% 30% 5px 5px / 100% 100% 5px 5px;
+            box-sizing: border-box; /* Include border in size */
+            transition: border 0.3s ease, background-color 0.5s ease; /* For damage/destroy */
+        }
+
+        .ship-superstructure {
+            position: absolute;
+            bottom: 55%; /* Overlap hull slightly */
+            left: 25%; /* Indent */
+            width: 50%; /* Narrower */
+            height: 45%; /* Upper part */
+            border: 1px solid #505050;
+            border-bottom: none; /* Avoid double border with hull */
+            border-radius: 5px 5px 0 0;
+            box-sizing: border-box;
+            transition: background-color 0.5s ease, border 0.5s ease; /* For destroy */
+        }
+
+        .ship-gun {
+            position: absolute;
+            bottom: 80%; /* On top of superstructure */
+            left: 40%; /* Centered on superstructure */
+            width: 20%;
+            height: 25%; /* Short gun barrel */
+            border-radius: 2px 2px 0 0;
+            transition: background-color 0.5s ease; /* For destroy */
+        }
+
+        /* Player specific colors */
+        #player-ship .ship-hull { background-color: #808080; border-color: #505050;}
+        #player-ship .ship-superstructure { background-color: #a9a9a9; border-color: #505050;}
+        #player-ship .ship-gun { background-color: #505050; }
+
+        /* Enemy specific colors */
+        .enemy-ship .ship-hull { background-color: #a0522d; border-color: #5d3a1a; }
+        .enemy-ship .ship-superstructure { background-color: #b87333; border-color: #5d3a1a; }
+        .enemy-ship .ship-gun { background-color: #5d3a1a; }
+
+        /* Damage States - Apply border change to the hull */
+        #player-ship.damage-1 .ship-hull { border: 3px dashed orange; }
+        #player-ship.damage-2 .ship-hull { border: 4px dashed red; }
+
+        /* Destroyed state - Apply transform to main container, colors to parts */
+        #player-ship.destroyed {
+            transform: rotate(-15deg) scale(0.9);
+            transition: transform 0.5s ease;
+        }
+        #player-ship.destroyed .ship-hull { background-color: #444; border-color: black; }
+        #player-ship.destroyed .ship-superstructure { background-color: #555; border-color: black; }
+        #player-ship.destroyed .ship-gun { background-color: #222; }
+
+
+        /* --- Projectile & UI Styling (Using updated Torpedo style) --- */
+        .projectile {
+            position: absolute;
+            z-index: 8;
+        }
+        .air-projectile {
+            width: 15px;
+            height: 15px;
+            background: radial-gradient(circle, yellow 20%, red 80%);
+            box-shadow: 0 0 5px 2px rgba(255, 165, 0, 0.7);
+            border-radius: 50%; /* Keep air projectiles round */
+        }
+        .torpedo {
+            width: 6px;  /* More elongated */
+            height: 30px;  /* Thinner */
+            background-color: #002244; /* Slightly different dark blue */
+            border: 1px solid #335577; /* Subtle border */
+            border-radius: 3px 0 0 3px; /* Rounded nose (left side) */
+            opacity: 0.9;
+            box-shadow: 1px 1px 3px rgba(200, 200, 255, 0.3); /* Adjusted trail */
+        }
+        #ui-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px black;
+        }
+        #score { margin-bottom: 5px; }
+        #lives { color: #ffdddd; }
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 31, 63, 0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+            padding: 20px; box-sizing: border-box; border-radius: 8px; z-index: 100;
+        }
+        .hidden { display: none; }
+        button {
+            font-family: 'Press Start 2P', cursive; background-color: #0077cc;
+            border: 2px solid white; color: white; padding: 12px 25px; font-size: 18px;
+            margin: 15px 5px; cursor: pointer; border-radius: 5px;
+            transition: background-color 0.3s, transform 0.1s; box-shadow: 0 4px #003366;
+        }
+        button:hover { background-color: #005fa3; }
+        button:active { background-color: #004c8a; box-shadow: 0 2px #003366; transform: translateY(2px); }
+        #final-score { font-size: 28px; margin-bottom: 25px; color: #ffff99; }
+        h1 { font-size: 2em; margin-bottom: 20px; text-shadow: 2px 2px 3px black; }
+
+    </style>
+</head>
+<body>
+    <div class="common nav">
+        <a href="index.html">Home</a>
+    </div>
+    <div id="game-container">
+        <div id="difficulty-screen" class="screen">
+            <h1>Select Difficulty</h1>
+            <button data-difficulty="easy">Easy</button>
+            <button data-difficulty="medium">Medium</button>
+            <button data-difficulty="hard">Hard</button>
+            <h3 class="mt-6 text-sm">Controls: Left/Right Arrow Keys</h3>
+        </div>
+        <div id="game-over-screen" class="screen hidden">
+            <h1>Game Over!</h1>
+            <div id="final-score">Score: 0</div>
+            <button id="restart-button">Restart Game</button>
+        </div>
+
+        <div id="ui-info">
+            <div id="score">Score: 0</div>
+            <div id="lives">Lives: 3</div>
+        </div>
+
+        <div id="player-ship">
+            <div class="ship-hull"></div>
+            <div class="ship-superstructure"></div>
+            <div class="ship-gun"></div>
+        </div>
+        </div> <script>
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('game-container');
+        const playerShipElement = document.getElementById('player-ship');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const difficultyScreen = document.getElementById('difficulty-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreElement = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+        const difficultyButtons = difficultyScreen.querySelectorAll('button[data-difficulty]');
+        const uiInfo = document.getElementById('ui-info');
+
+        // --- Game Configuration ---
+        const playerSpeed = 8;
+        const baseLives = 3;
+        // Use updated dimensions consistent with CSS
+        const playerShipWidth = 60;
+        const playerShipHeight = 45;
+        const enemyShipWidth = 60;
+        const enemyShipHeight = 45;
+        const airProjectileWidth = 15;
+        const torpedoWidth = 30; // Match CSS width for .torpedo
+
+
+        const difficulties = {
+            easy: { enemySpeed: 1.5, enemySpawnInterval: 2000, enemyFireInterval: 1800, projectileSpeed: 3, },
+            medium: { enemySpeed: 2.5, enemySpawnInterval: 1500, enemyFireInterval: 1300, projectileSpeed: 4, },
+            hard: { enemySpeed: 3.5, enemySpawnInterval: 1000, enemyFireInterval: 900, projectileSpeed: 5.5, }
+        };
+        let currentDifficulty = difficulties.medium;
+
+        // --- Game State ---
+        let score = 0;
+        let lives = baseLives;
+        let isGameOver = true;
+        let playerX = 0; // Will be calculated in window.onload
+        let keysPressed = {};
+        let enemies = [];
+        let projectiles = [];
+        let gameLoopId;
+        let enemySpawnTimer;
+        let scoreTimer;
+
+        // --- Initialization ---
+        function initGame(difficulty) {
+            console.log("Initializing game...");
+            currentDifficulty = difficulties[difficulty];
+            score = 0;
+            lives = baseLives;
+            isGameOver = false;
+            playerX = gameContainer.offsetWidth / 2 - playerShipWidth / 2;
+            console.log(`Initial playerX calculated: ${playerX}`);
+            playerShipElement.style.left = `${playerX}px`;
+            playerShipElement.className = ''; // Reset classes
+            playerShipElement.style.transform = 'none'; // Reset transform
+            playerShipElement.style.display = 'block'; // Ensure visible
+            playerShipElement.style.opacity = '1';
+            keysPressed = {};
+
+            gameContainer.querySelectorAll('.enemy-ship, .projectile').forEach(el => el.remove());
+            enemies = [];
+            projectiles = [];
+
+            scoreElement.textContent = `Score: ${score}`;
+            livesElement.textContent = `Lives: ${lives}`;
+            difficultyScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            uiInfo.classList.remove('hidden');
+
+            startGameLoop();
+            startEnemySpawner();
+            startScoreCounter();
+        }
+
+        // --- Game Loop ---
+        function startGameLoop() {
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            function loop() {
+                if (isGameOver) return;
+                updatePlayerPosition();
+                updateEnemies();
+                updateProjectiles();
+                checkCollisions();
+                gameLoopId = requestAnimationFrame(loop);
+            }
+            gameLoopId = requestAnimationFrame(loop);
+        }
+
+        // --- Player Logic ---
+        function updatePlayerPosition() {
+            const containerWidth = gameContainer.offsetWidth;
+            if (keysPressed['ArrowLeft']) { playerX -= playerSpeed; }
+            if (keysPressed['ArrowRight']) { playerX += playerSpeed; }
+            playerX = Math.max(0, Math.min(containerWidth - playerShipWidth, playerX));
+            playerShipElement.style.left = `${playerX}px`;
+        }
+
+        // --- Enemy Logic ---
+        function startEnemySpawner() {
+            if (enemySpawnTimer) clearInterval(enemySpawnTimer);
+            enemySpawnTimer = setInterval(spawnEnemy, currentDifficulty.enemySpawnInterval);
+        }
+
+        function spawnEnemy() {
+            if (isGameOver) return;
+            // Create the main enemy ship container
+            const element = document.createElement('div');
+            element.classList.add('enemy-ship');
+            element.style.width = `${enemyShipWidth}px`;
+            element.style.height = `${enemyShipHeight}px`;
+
+            // Create and append structural elements
+            const hull = document.createElement('div');
+            hull.className = 'ship-hull';
+            element.appendChild(hull);
+
+            const superstructure = document.createElement('div');
+            superstructure.className = 'ship-superstructure';
+            element.appendChild(superstructure);
+
+            const gun = document.createElement('div');
+            gun.className = 'ship-gun';
+            element.appendChild(gun);
+
+            // Positioning logic
+            const spawnPadding = 10;
+            const maxSpawnX = gameContainer.offsetWidth - enemyShipWidth - spawnPadding * 2;
+            const x = Math.random() * maxSpawnX + spawnPadding;
+            const y = -enemyShipHeight;
+
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+
+            gameContainer.appendChild(element); // Appends inside the container
+            enemies.push({ element, x, y, fireCooldown: Math.random() * currentDifficulty.enemyFireInterval });
+        }
+
+
+        function updateEnemies() {
+            const frameTimeMs = 1000 / 60;
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                if (!enemy.element || !gameContainer.contains(enemy.element)) {
+                    enemies.splice(i, 1);
+                    continue;
+                }
+                enemy.y += currentDifficulty.enemySpeed;
+                enemy.element.style.top = `${enemy.y}px`;
+                enemy.x = parseFloat(enemy.element.style.left);
+
+                enemy.fireCooldown -= frameTimeMs;
+                if (enemy.fireCooldown <= 0) {
+                    enemyFire(enemy);
+                    enemy.fireCooldown = currentDifficulty.enemyFireInterval + (Math.random() - 0.5) * (currentDifficulty.enemyFireInterval * 0.3);
+                }
+
+                if (enemy.y > gameContainer.offsetHeight) {
+                    enemy.element.remove();
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        function enemyFire(enemy) {
+            if (isGameOver || !enemy.element) return;
+            const type = Math.random() < 0.6 ? 'torpedo' : 'air-projectile';
+            const element = document.createElement('div');
+            element.classList.add('projectile', type);
+
+            const enemyRect = getBoundingBox(enemy.element);
+            if (enemyRect.width === 0) return; // Don't fire if enemy rect invalid
+
+            const projectileWidth = (type === 'torpedo' ? torpedoWidth : airProjectileWidth);
+            const x = enemyRect.left + enemyRect.width / 2 - projectileWidth / 2;
+            const y = enemyRect.bottom;
+            let speed = currentDifficulty.projectileSpeed;
+
+            if(type === 'torpedo') { speed *= 0.8; }
+
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+
+            gameContainer.appendChild(element);
+            projectiles.push({ element, x, y, type, speed });
+        }
+
+
+        // --- Projectile Logic ---
+        function updateProjectiles() {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const proj = projectiles[i];
+                if (!proj.element || !gameContainer.contains(proj.element)) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+                let currentY = parseFloat(proj.element.style.top);
+                currentY += proj.speed;
+                proj.element.style.top = `${currentY}px`;
+                proj.y = currentY;
+
+                if (currentY > gameContainer.offsetHeight) {
+                    proj.element.remove();
+                    projectiles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- Scoring ---
+        function startScoreCounter() {
+            if (scoreTimer) clearInterval(scoreTimer);
+            scoreTimer = setInterval(() => {
+                if (!isGameOver) {
+                    score += 10;
+                    scoreElement.textContent = `Score: ${score}`;
+                    finalScoreElement.textContent = `Score: ${score}`;
+                }
+            }, 1000);
+        }
+
+        // --- Collision Detection ---
+        function getBoundingBox(element) {
+            if (!element || !gameContainer.contains(element)) {
+                return { left: -1, top: -1, right: -1, bottom: -1, width: 0, height: 0 };
+            }
+            const rect = element.getBoundingClientRect();
+            const gameRect = gameContainer.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) {
+                return { left: -1, top: -1, right: -1, bottom: -1, width: 0, height: 0 };
+            }
+            return {
+                left: rect.left - gameRect.left, top: rect.top - gameRect.top,
+                right: rect.right - gameRect.left, bottom: rect.bottom - gameRect.top,
+                width: rect.width, height: rect.height
+            };
+        }
+
+        function checkCollisions() {
+            const playerRect = getBoundingBox(playerShipElement);
+            if (playerRect.width === 0) return;
+
+            const collisionTolerance = 4;
+
+            // Player vs Enemy Ship
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                if (!enemy.element) continue;
+                const enemyRect = getBoundingBox(enemy.element);
+                if (enemyRect.width === 0) continue;
+
+                const overlapsX = (playerRect.left < enemyRect.right - collisionTolerance) && (playerRect.right > enemyRect.left + collisionTolerance);
+                const overlapsY = (playerRect.top < enemyRect.bottom - collisionTolerance) && (playerRect.bottom > enemyRect.top + collisionTolerance);
+                if (overlapsX && overlapsY) { triggerGameOver(true); return; }
+            }
+
+            // Player vs Projectile
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const proj = projectiles[i];
+                if (!proj.element) continue;
+                const projRect = getBoundingBox(proj.element);
+                if (projRect.width === 0) continue;
+
+                if (rectsOverlap(playerRect, projRect)) {
+                    const elementToRemove = proj.element;
+                    // Remove from array first to prevent trying to access it again
+                    projectiles.splice(i, 1);
+                    if (elementToRemove) { elementToRemove.remove(); }
+                    handlePlayerHit();
+                    if (isGameOver) return; // Exit checkCollisions immediately
+                }
+            }
+        }
+
+
+        function rectsOverlap(rect1, rect2) {
+            if (rect1.width === 0 || rect2.width === 0) return false;
+            return ( rect1.left < rect2.right && rect1.right > rect2.left && rect1.top < rect2.bottom && rect1.bottom > rect2.top );
+        }
+
+        // --- Player Hit & Game Over ---
+        function handlePlayerHit() {
+            if (isGameOver) return;
+            lives--;
+            livesElement.textContent = `Lives: ${lives}`;
+            scoreElement.textContent = `Score: ${score}`;
+
+            playerShipElement.classList.remove('damage-1', 'damage-2');
+            if (lives === 2) { playerShipElement.classList.add('damage-1'); }
+            else if (lives === 1) { playerShipElement.classList.add('damage-2'); }
+            else if (lives <= 0) { triggerGameOver(false); }
+        }
+
+        function triggerGameOver(instantKill) {
+            // --- FIX: Capture the score *before* stopping timers/loops ---
+            const finalScoreValue = score;
+            console.log(`Game Over triggered! Final Score Captured: ${finalScoreValue}`);
+
+            // Update the main UI score one last time (optional, but good practice)
+            scoreElement.textContent = `Score: ${finalScoreValue}`;
+            // --- FIX: Set the game over screen score using the captured value ---
+            finalScoreElement.textContent = `Score: ${finalScoreValue}`;
+
+            if (isGameOver) return; // Prevent multiple triggers
+            isGameOver = true; // Set game over state
+
+            // Stop game processes
+            cancelAnimationFrame(gameLoopId); gameLoopId = null;
+            clearInterval(enemySpawnTimer); enemySpawnTimer = null;
+            clearInterval(scoreTimer); scoreTimer = null; // Stop score incrementing
+
+            // Apply visual effect for game over
+            playerShipElement.classList.add('destroyed');
+
+            // Clear state arrays (can be done here or after timeout)
+            // enemies = [];
+            // projectiles = [];
+
+            // Delay showing the game over screen
+            setTimeout(() => {
+                // --- FIX: Ensure the final score display uses the captured value ---
+                // (Redundant if set above, but safe to set again)
+                finalScoreElement.textContent = `Score: ${finalScoreValue}`;
+                gameOverScreen.classList.remove('hidden'); // Show game over screen
+                uiInfo.classList.add('hidden'); // Hide in-game UI
+                // Clean up remaining DOM elements after a delay
+                gameContainer.querySelectorAll('.enemy-ship, .projectile').forEach(el => el.remove());
+                // Clear state arrays here if not done above
+                enemies = [];
+                projectiles = [];
+            }, 1000); // 1 second delay
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            if (!isGameOver) {
+                keysPressed[e.key] = true;
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.preventDefault();
+            }
+        });
+        document.addEventListener('keyup', (e) => { delete keysPressed[e.key]; });
+        difficultyButtons.forEach(button => {
+            button.addEventListener('click', () => initGame(button.getAttribute('data-difficulty')));
+        });
+        restartButton.addEventListener('click', () => {
+            console.log("Restarting game...");
+            playerShipElement.className = '';
+            playerShipElement.style.transform = 'none';
+            gameOverScreen.classList.add('hidden');
+            difficultyScreen.classList.remove('hidden');
+            gameContainer.querySelectorAll('.enemy-ship, .projectile').forEach(el => el.remove());
+            enemies = [];
+            projectiles = [];
+            if (enemySpawnTimer) clearInterval(enemySpawnTimer); enemySpawnTimer = null;
+            if (scoreTimer) clearInterval(scoreTimer); scoreTimer = null;
+            if (gameLoopId) cancelAnimationFrame(gameLoopId); gameLoopId = null;
+            uiInfo.classList.add('hidden');
+        });
+
+        // --- Initial Setup ---
+        uiInfo.classList.add('hidden');
+        window.onload = () => {
+            console.log("Window loaded.");
+            try {
+                // Calculate initial position
+                playerX = gameContainer.offsetWidth / 2 - playerShipWidth / 2;
+                console.log(`Container Width: ${gameContainer.offsetWidth}, Ship Width: ${playerShipWidth}, Calculated playerX: ${playerX}`);
+                playerShipElement.style.left = `${playerX}px`;
+                // Ensure player ship is displayed
+                playerShipElement.style.display = 'block';
+                playerShipElement.style.opacity = '1';
+                console.log(`Player ship initial style.left: ${playerShipElement.style.left}`);
+            } catch (error) {
+                console.error("Error during window.onload initialization:", error);
+            }
+        };
+        </script>
+    </body>
+</html>
